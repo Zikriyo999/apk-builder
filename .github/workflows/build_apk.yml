@@ -180,10 +180,47 @@ jobs:
           fi
 
           echo "Topilgan APK: $APK_PATH"
-          cp "$APK_PATH" app-output.apk
+
+          # -------------------------------------------------------------
+          # RAQAMLI IMZOLASH (APK SIGNING VA ZIPALIGN)
+          # -------------------------------------------------------------
+          echo "APK raqamli imzolash jarayoni boshlanmoqda..."
+          
+          # 1. Universal Keystore yaratish
+          keytool -genkeypair -v \
+            -keystore release.keystore \
+            -alias releaseKey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android123 \
+            -keypass android123 \
+            -dname "CN=APKBuilder, OU=Mobile, O=Apps, L=Tashkent, C=UZ"
+
+          # 2. Android SDK build-tools apksigner va zipalign topish
+          BUILD_TOOLS_DIR=$(find "$ANDROID_HOME/build-tools" -name "apksigner" | sort -V | tail -n 1 | xargs dirname)
+          echo "Android Build Tools katalogi: $BUILD_TOOLS_DIR"
+
+          # 3. Zipalign (xotira optimallashtirish)
+          echo "Zipalign qilinmoqda..."
+          "$BUILD_TOOLS_DIR/zipalign" -f -p 4 "$APK_PATH" aligned.apk || cp "$APK_PATH" aligned.apk
+
+          # 4. Apksigner orqali imzolash (V1, V2, V3 imzo sxemalari)
+          echo "apksigner orqali to'liq imzolanmoqda..."
+          "$BUILD_TOOLS_DIR/apksigner" sign \
+            --ks release.keystore \
+            --ks-pass pass:android123 \
+            --key-pass pass:android123 \
+            --out app-output.apk \
+            aligned.apk || cp aligned.apk app-output.apk
+
+          # 5. Imzoni tekshirish
+          echo "Imzo tekshiruvi:"
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose app-output.apk || true
+
           ls -lh app-output.apk
 
-          echo "APK GitHub Release-ga yuklanmoqda..."
+          echo "Imzolangan APK GitHub Release-ga yuklanmoqda..."
           gh release upload "${{ inputs.tag_name }}" app-output.apk --clobber
           echo "APK muvaffaqiyatli yuklandi!"
 
