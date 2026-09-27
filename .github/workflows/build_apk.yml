@@ -44,6 +44,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Gradle muhitini sozlash (Android va React Native uchun)
+        if: inputs.project_type == 'android' || inputs.project_type == 'react_native'
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Node.js sozlash (React Native va Web uchun)
         if: inputs.project_type == 'react_native' || inputs.project_type == 'web'
         uses: actions/setup-node@v4
@@ -103,9 +107,18 @@ jobs:
         if: inputs.project_type == 'android'
         working-directory: ${{ steps.set-workdir.outputs.workdir }}
         run: |
-          if [ -f "./gradlew" ]; then
+          echo "Android SDK litsenziyalari qabul qilinmoqda..."
+          yes | sdkmanager --licenses 2>/dev/null || true
+
+          # Agar gradle-wrapper.jar yo'q bo'lsa, gradle wrapper orqali qayta yaratamiz
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "gradle-wrapper.jar topilmadi, gradle wrapper yaratilmoqda..."
+            gradle wrapper || true
+          fi
+
+          if [ -f "./gradlew" ] && [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
             chmod +x ./gradlew
-            ./gradlew assembleRelease || ./gradlew assembleDebug
+            ./gradlew assembleRelease || ./gradlew assembleDebug || gradle assembleRelease || gradle assembleDebug
           elif [ -f "./app/build.gradle" ] || [ -f "./build.gradle" ]; then
             gradle assembleRelease || gradle assembleDebug
           else
