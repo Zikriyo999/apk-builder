@@ -1,0 +1,182 @@
+name: Build APK from Source
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: 'Vazifa ID'
+        required: true
+        type: string
+      tag_name:
+        description: 'Release Tag nomi'
+        required: true
+        type: string
+      release_id:
+        description: 'Release ID'
+        required: true
+        type: string
+      project_type:
+        description: 'Loyiha turi (flutter, android, react_native, web)'
+        required: true
+        type: choice
+        options:
+          - flutter
+          - android
+          - react_native
+          - web
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build APK (${{ inputs.project_type }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Repozitoriyani yuklash
+        uses: actions/checkout@v4
+
+      - name: Java muhitini sozlash (Java 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Node.js sozlash (React Native va Web uchun)
+        if: inputs.project_type == 'react_native' || inputs.project_type == 'web'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Flutter sozlash
+        if: inputs.project_type == 'flutter'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Foydalanuvchi loyihasini Release-dan yuklab olish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Release-dan project.zip yuklanmoqda..."
+          gh release download "${{ inputs.tag_name }}" --pattern "project.zip" --dir .
+          mkdir -p workspace
+          unzip -q project.zip -d workspace
+          echo "Fayllar ochildi."
+
+      - name: Loyiha katalogini aniqlash
+        id: set-workdir
+        run: |
+          cd workspace
+          # Agar zip ichida bitta asosiy papka bo'lsa, o'sha papkaga kiramiz
+          DIR_COUNT=$(find . -maxdepth 1 -mindepth 1 -type d | wc -l)
+          FILE_COUNT=$(find . -maxdepth 1 -mindepth 1 -type f | wc -l)
+          
+          if [ "$FILE_COUNT" -eq 0 ] && [ "$DIR_COUNT" -eq 1 ]; then
+            TARGET_DIR=$(find . -maxdepth 1 -mindepth 1 -type d | head -n 1)
+            echo "Asosiy papka topildi: $TARGET_DIR"
+            echo "workdir=workspace/$TARGET_DIR" >> $GITHUB_OUTPUT
+          else
+            echo "Ildiz papkada fayllar mavjud"
+            echo "workdir=workspace" >> $GITHUB_OUTPUT
+          fi
+
+      # -------------------------------------------------------------
+      # 1. FLUTTER BUILD
+      # -------------------------------------------------------------
+      - name: Flutter APK Build
+        if: inputs.project_type == 'flutter'
+        working-directory: ${{ steps.set-workdir.outputs.workdir }}
+        run: |
+          echo "Flutter bog'liqliklari yuklanmoqda..."
+          flutter pub get
+          echo "Flutter APK yaratilmoqda..."
+          flutter build apk --release || flutter build apk --debug
+
+      # -------------------------------------------------------------
+      # 2. ANDROID NATIVE (Gradle) BUILD
+      # -------------------------------------------------------------
+      - name: Android Native APK Build
+        if: inputs.project_type == 'android'
+        working-directory: ${{ steps.set-workdir.outputs.workdir }}
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleRelease || ./gradlew assembleDebug
+          elif [ -f "./app/build.gradle" ] || [ -f "./build.gradle" ]; then
+            gradle assembleRelease || gradle assembleDebug
+          else
+            echo "Xato: build.gradle yoki gradlew topilmadi!"
+            exit 1
+          fi
+
+      # -------------------------------------------------------------
+      # 3. REACT NATIVE BUILD
+      # -------------------------------------------------------------
+      - name: React Native APK Build
+        if: inputs.project_type == 'react_native'
+        working-directory: ${{ steps.set-workdir.outputs.workdir }}
+        run: |
+          npm install --legacy-peer-deps || yarn install
+          if [ -d "android" ]; then
+            cd android
+            chmod +x ./gradlew || true
+            ./gradlew assembleRelease || ./gradlew assembleDebug
+          else
+            echo "Xato: android/ papkasi topilmadi!"
+            exit 1
+          fi
+
+      # -------------------------------------------------------------
+      # 4. WEB TO APK BUILD (Capacitor or WebView)
+      # -------------------------------------------------------------
+      - name: Web to APK Build
+        if: inputs.project_type == 'web'
+        working-directory: ${{ steps.set-workdir.outputs.workdir }}
+        run: |
+          echo "Web loyiha APK-ga o'girilmoqda..."
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android --save-dev
+          npx cap init "WebApp" "com.app.webapp" --web-dir .
+          npx cap add android
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleRelease || ./gradlew assembleDebug
+
+      # -------------------------------------------------------------
+      # YAKUNIY APK-NI TOPISH VA YUKLASH
+      # -------------------------------------------------------------
+      - name: Tayyor APK faylini topish va saqlash
+        id: find-apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Yaratilgan APK qidirilmoqda..."
+          APK_PATH=$(find workspace -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            # Ikkinchi urinish - har qanday apk
+            APK_PATH=$(find workspace -type f -name "*.apk" | head -n 1)
+          fi
+
+          if [ -z "$APK_PATH" ]; then
+            echo "Xato: Hech qanday .apk fayl topilmadi!"
+            exit 1
+          fi
+
+          echo "Topilgan APK: $APK_PATH"
+          cp "$APK_PATH" app-output.apk
+          ls -lh app-output.apk
+
+          echo "APK GitHub Release-ga yuklanmoqda..."
+          gh release upload "${{ inputs.tag_name }}" app-output.apk --clobber
+          echo "APK muvaffaqiyatli yuklandi!"
+
+      - name: Artifact sifatida ham saqlash
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-output-apk
+          path: app-output.apk
+          retention-days: 1
