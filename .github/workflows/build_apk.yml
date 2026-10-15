@@ -110,15 +110,29 @@ jobs:
           echo "Android SDK litsenziyalari qabul qilinmoqda..."
           yes | sdkmanager --licenses 2>/dev/null || true
 
-          # Agar gradle-wrapper.jar yo'q bo'lsa, gradle wrapper orqali qayta yaratamiz
-          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "gradle-wrapper.jar topilmadi, gradle wrapper yaratilmoqda..."
-            gradle wrapper || true
+          # AGP versiyasini aniqlaymiz va mos Gradle versiyasini tanlaymiz
+          DETECTED_GRADLE="8.5"
+          if grep -rn "com.android.tools.build:gradle:7" . 2>/dev/null; then
+            DETECTED_GRADLE="7.5.1"
+          elif grep -rn "com.android.tools.build:gradle:8" . 2>/dev/null; then
+            DETECTED_GRADLE="8.5"
+          fi
+          echo "Moslashtirilgan Gradle versiyasi: $DETECTED_GRADLE"
+
+          # Agar gradle wrapper mavjud bo'lmasa yoki jar fayli bo'lmasa, wrapper yaratamiz
+          if [ ! -f "gradle/wrapper/gradle-wrapper.properties" ] || [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Gradle wrapper qayta yaratilmoqda ($DETECTED_GRADLE)..."
+            gradle wrapper --gradle-version "$DETECTED_GRADLE" --distribution-type bin || true
           fi
 
-          if [ -f "./gradlew" ] && [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+          # settings.gradle va build.gradle dagi repositoriesMode ziddiyatini to'g'rilash
+          if [ -f "settings.gradle" ] && grep -q "FAIL_ON_PROJECT_REPOS" settings.gradle; then
+            sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_SETTINGS/g' settings.gradle || true
+          fi
+
+          if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
-            ./gradlew assembleRelease || ./gradlew assembleDebug || gradle assembleRelease || gradle assembleDebug
+            ./gradlew assembleRelease || ./gradlew assembleDebug
           elif [ -f "./app/build.gradle" ] || [ -f "./build.gradle" ]; then
             gradle assembleRelease || gradle assembleDebug
           else
