@@ -125,6 +125,17 @@ jobs:
             gradle wrapper --gradle-version "$DETECTED_GRADLE" --distribution-type bin || true
           fi
 
+          # gradle.properties ichida AndroidX va Jetifier mavjudligini ta'minlash
+          touch gradle.properties
+          if ! grep -q "android.useAndroidX" gradle.properties; then
+            echo "android.useAndroidX=true" >> gradle.properties
+          else
+            sed -i 's/android.useAndroidX=.*/android.useAndroidX=true/g' gradle.properties
+          fi
+          if ! grep -q "android.enableJetifier" gradle.properties; then
+            echo "android.enableJetifier=true" >> gradle.properties
+          fi
+
           # settings.gradle va build.gradle dagi repositoriesMode ziddiyatini to'g'rilash
           if [ -f "settings.gradle" ] && grep -q "FAIL_ON_PROJECT_REPOS" settings.gradle; then
             sed -i 's/FAIL_ON_PROJECT_REPOS/PREFER_SETTINGS/g' settings.gradle || true
