@@ -38,11 +38,11 @@ jobs:
       - name: Repozitoriyani yuklash
         uses: actions/checkout@v4
 
-      - name: Java muhitini sozlash (Java 17)
+      - name: Java muhitini sozlash (Java 21)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Gradle muhitini sozlash (Android va React Native uchun)
         if: inputs.project_type == 'android' || inputs.project_type == 'react_native'
