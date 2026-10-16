@@ -222,8 +222,11 @@ jobs:
           if ! grep -q "android.useAndroidX" gradle.properties; then
             echo "android.useAndroidX=true" >> gradle.properties
           fi
-          if ! grep -q "android.enableJetifier" gradle.properties; then
-            echo "android.enableJetifier=true" >> gradle.properties
+          # Jetifier-ni o'chirish va Kotlin duplicate class ziddiyatini yo'qotish
+          echo "android.enableJetifier=false" >> gradle.properties
+
+          if [ -f "app/build.gradle" ]; then
+            echo -e "\nconfigurations.all {\n    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'\n    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'\n}" >> app/build.gradle
           fi
 
           chmod +x ./gradlew
