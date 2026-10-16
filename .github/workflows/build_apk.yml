@@ -32,7 +32,7 @@ jobs:
   build:
     name: Build APK (${{ inputs.project_type }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Repozitoriyani yuklash
