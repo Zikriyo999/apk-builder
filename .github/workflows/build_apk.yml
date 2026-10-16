@@ -176,11 +176,56 @@ jobs:
         working-directory: ${{ steps.set-workdir.outputs.workdir }}
         run: |
           echo "Web loyiha APK-ga o'girilmoqda..."
+          
+          # Web katalogini aniqlash va tayyorlash
+          WEB_DIR="www"
+          if [ -d "dist" ] && [ -f "dist/index.html" ]; then
+            WEB_DIR="dist"
+          elif [ -d "build" ] && [ -f "build/index.html" ]; then
+            WEB_DIR="build"
+          elif [ -d "public" ] && [ -f "public/index.html" ]; then
+            WEB_DIR="public"
+          elif [ -d "www" ] && [ -f "www/index.html" ]; then
+            WEB_DIR="www"
+          else
+            mkdir -p www
+            # Mavjud fayllarni www ichiga ko'chiramiz
+            for f in *; do
+              if [ "$f" != "www" ] && [ "$f" != "android" ] && [ "$f" != "node_modules" ] && [ "$f" != "package.json" ]; then
+                cp -r "$f" www/ 2>/dev/null || true
+              fi
+            done
+            if [ -f "index.html" ] && [ ! -f "www/index.html" ]; then
+              cp index.html www/
+            fi
+          fi
+
+          if [ ! -f "$WEB_DIR/index.html" ]; then
+            echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>App</title></head><body><h1>Ilova yuklandi</h1></body></html>" > "$WEB_DIR/index.html"
+          fi
+
+          APP_TITLE="UniversalApp"
+          if [ -f "$WEB_DIR/index.html" ]; then
+            PARSED_TITLE=$(grep -oPm1 "(?<=<title>)[^<]+" "$WEB_DIR/index.html" 2>/dev/null | tr -cd '[:alnum:] ' || true)
+            if [ -n "$PARSED_TITLE" ]; then
+              APP_TITLE="$PARSED_TITLE"
+            fi
+          fi
+
           npm init -y
           npm install @capacitor/core @capacitor/cli @capacitor/android --save-dev
-          npx cap init "WebApp" "com.app.webapp" --web-dir .
+          npx cap init "$APP_TITLE" "com.universal.app" --web-dir "$WEB_DIR"
           npx cap add android
+          
           cd android
+          touch gradle.properties
+          if ! grep -q "android.useAndroidX" gradle.properties; then
+            echo "android.useAndroidX=true" >> gradle.properties
+          fi
+          if ! grep -q "android.enableJetifier" gradle.properties; then
+            echo "android.enableJetifier=true" >> gradle.properties
+          fi
+
           chmod +x ./gradlew
           ./gradlew assembleRelease || ./gradlew assembleDebug
 
