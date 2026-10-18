@@ -111,9 +111,11 @@ jobs:
           yes | sdkmanager --licenses 2>/dev/null || true
 
           # AGP versiyasini aniqlaymiz va mos Gradle versiyasini tanlaymiz
-          DETECTED_GRADLE="8.5"
-          if grep -rn "com.android.tools.build:gradle:7" . 2>/dev/null; then
+          DETECTED_GRADLE="8.9"
+          if grep -rn "com.android.tools.build:gradle:7" . 2>/dev/null || grep -rn "id(\"com.android.application\") version \"7" . 2>/dev/null; then
             DETECTED_GRADLE="7.5.1"
+          elif grep -rn "8.7" . 2>/dev/null || grep -rn "8.8" . 2>/dev/null; then
+            DETECTED_GRADLE="8.9"
           elif grep -rn "com.android.tools.build:gradle:8" . 2>/dev/null; then
             DETECTED_GRADLE="8.5"
           fi
